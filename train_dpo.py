@@ -707,15 +707,16 @@ if __name__ == "__main__":
     )
 
     # Trainer Args
+    lr = 1e-5
     training_args = DPOConfig(
-        output_dir="cad-recode-dpo",
-        num_train_epochs=1,
+        output_dir=f"cad-recode-dpo-lr{lr}",
+        num_train_epochs=3,
         per_device_train_batch_size=2, # Adjust based on GPU memory
         per_device_eval_batch_size=2,
         gradient_accumulation_steps=8, # Effective batch size = 8 * 2 = 16
         gradient_checkpointing=True, # Already enabled in model, TRL uses it too
         optim="paged_adamw_32bit", # Paged optimizer for QLoRA
-        learning_rate=5e-5, # Adjust as needed
+        learning_rate=lr, # Adjust as needed
         lr_scheduler_type="cosine", # Cosine scheduler is common
         logging_steps=10,
         save_strategy="steps",
@@ -736,6 +737,12 @@ if __name__ == "__main__":
         remove_unused_columns=False, # Important: Keep point_cloud column
     )
 
+    wandb.init(
+        project="CADRecodeDPO",
+        name="cad-recode-dpo-logs",
+        config=training_args,
+    )
+
     trainer = CADRecodeDPOTrainer(
         model=model,
         ref_model=model_ref,  # Let trainer handle creation if None
@@ -754,8 +761,8 @@ if __name__ == "__main__":
 
     # Save the final adapter model
     print("Saving final adapter model...")
-    trainer.save_model("cad-recode-dpo-final")
-    tokenizer.save_pretrained("cad-recode-dpo-final")
+    trainer.save_model(f"cad-recode-dpo-lr{lr}-final")
+    tokenizer.save_pretrained(f"cad-recode-dpo-lr{lr}-final")
 
     wandb.finish()
     print("DPO Training Finished.")
