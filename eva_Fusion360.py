@@ -198,14 +198,15 @@ if __name__ == '__main__':
         torch_dtype='auto',
         attn_implementation=attn_implementation).eval().to(device)
 
-    # CHECKPOINT_DIR = "cad-recode-finetuned-final"
-    # model = CADRecode.from_pretrained(CHECKPOINT_DIR, torch_dtype=torch.bfloat16, trust_remote_code=True).to(device)
-    # model = PeftModel.from_pretrained(model, CHECKPOINT_DIR)
-    # model.eval()
-
+    # CHECKPOINT_DIR = "cad-recode-dpo-lr1e-06-final"
+    # model = CADRecode.from_pretrained(
+    #     CHECKPOINT_DIR,
+    #     torch_dtype=torch.bfloat16,
+    # ).eval().to(device)
 
     fusion360_dataset = Fusion360EvalDataset("Fusion360/r1.0.1")
     eval_summary = {}
+    invalid_gt_num = 0
     invalid_pred_num = 0
 
     for i, data in enumerate(tqdm(fusion360_dataset)):
@@ -254,7 +255,7 @@ if __name__ == '__main__':
                 pred_mesh.process(validate=True)
 
             if not gt_mesh.is_volume:
-                raise ValueError("GT meshe is not a volume, cannot calculate reliable intersection.")
+                raise KeyError("GT mesh is not a volume, cannot calculate reliable intersection.")
             if not pred_mesh.is_volume:
                 raise ValueError("Pred mesh is not a volume, cannot calculate reliable intersection.")
 
@@ -293,7 +294,12 @@ if __name__ == '__main__':
                 iou = 1.0 if intersection_volume < 1e-6 else 0.0
 
             eval_summary[uuid] = {"CD": cd * 1000, "IoU": iou, "pred": py_string}
-
+        except KeyError as e:
+            print(f"Error ({uuid}):", e)
+            invalid_gt_num += 1
+            invalid_pred_num += 1
+            eval_summary[uuid] = {"CD": None, "IoU": None, "pred": py_string}
+            continue
         except Exception as e:
             print(f"Error ({uuid}):", e)
             invalid_pred_num += 1
@@ -308,7 +314,7 @@ if __name__ == '__main__':
     print(f"CD mean: {np.mean(CDs)}")
     print(f"CD median: {np.median(CDs)}")
     print(f"IoU mean: {np.mean(IoUs)}")
-    print(f"Invalid preds: {invalid_pred_num} / {len(fusion360_dataset)}")
+    print(f"Invalid preds: {invalid_pred_num} / {len(fusion360_dataset)} (within which {invalid_gt_num} GTs are invalid)")
 
     with open("eval results.json", "w") as f:
         json.dump(eval_summary, f, indent=4)
